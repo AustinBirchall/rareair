@@ -179,21 +179,24 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"
 let climb=1,qs=[],i=0,res=[];
 try{climb=+(localStorage.getItem("rareair.climb")||0)+1;localStorage.setItem("rareair.climb",climb)}catch(e){}
 
-// Shuffle-bag: no prompt repeats until every prompt has been played.
+// Never repeat: every prompt a player has been shown is remembered.
+// New prompts are drawn only from ones they haven't seen; only when all are used does it start over.
 const shuffle=a=>{for(let k=a.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[a[k],a[j]]=[a[j],a[k]]}return a};
-let memBag=null;
-function loadBag(){try{const b=JSON.parse(localStorage.getItem("rareair.bag")||"null");if(Array.isArray(b))return b.filter(x=>BANK.includes(x))}catch(e){}return memBag}
-function saveBag(b){memBag=b;try{localStorage.setItem("rareair.bag",JSON.stringify(b))}catch(e){}}
+let memSeen=[];
+function loadSeen(){try{const v=JSON.parse(localStorage.getItem("rareair.seen")||"null");if(Array.isArray(v))return v}catch(e){}return memSeen}
+function markSeen(label){const v=loadSeen();if(!v.includes(label)){v.push(label);memSeen=v;try{localStorage.setItem("rareair.seen",JSON.stringify(v))}catch(e){}}}
 function pick(){
-  let bag=loadBag()||[];
-  const out=[];
-  while(out.length<ROUNDS){
-    if(!bag.length) bag=shuffle(BANK.filter(x=>!out.includes(x)&&!lastSet.includes(x)));
-    if(!bag.length) bag=shuffle(BANK.filter(x=>!out.includes(x)));
-    out.push(bag.pop());
+  let seen=loadSeen().filter(l=>PMAP[l]);
+  let avail=PROMPTS.filter(l=>!seen.includes(l));
+  if(avail.length<ROUNDS){ // whole pool used: start a fresh cycle, still skipping the last climb's prompts
+    const keep=lastSet.filter(l=>PMAP[l]);memSeen=keep;try{localStorage.setItem("rareair.seen",JSON.stringify(keep))}catch(e){}
+    avail=PROMPTS.filter(l=>!keep.includes(l));
   }
-  saveBag(bag);lastSet=out;
-  try{localStorage.setItem("rareair.last",JSON.stringify(out))}catch(e){}
+  shuffle(avail);
+  const out=[],cats=new Set();
+  for(const l of avail){if(out.length>=ROUNDS)break;if(!cats.has(PMAP[l].cat)){out.push(l);cats.add(PMAP[l].cat)}}
+  for(const l of avail){if(out.length>=ROUNDS)break;if(!out.includes(l))out.push(l)}
+  lastSet=out;try{localStorage.setItem("rareair.last",JSON.stringify(out))}catch(e){}
   return out;
 }
 let lastSet=[];try{lastSet=JSON.parse(localStorage.getItem("rareair.last")||"[]")}catch(e){}
@@ -294,7 +297,7 @@ function start(){
 function show(){
   $("dots").innerHTML=qs.map((_,k)=>`<i class="${k<i?"on":k===i?"cur":""}"></i>`).join("");
   $("rnd").textContent=`Climb #${climb} · round ${i+1} of ${ROUNDS}`;
-  $("prompt").textContent="Name "+qs[i];
+  $("prompt").textContent="Name "+qs[i];markSeen(qs[i]);
   $("hint").classList.remove("err");
   $("hint").textContent="25 seconds per prompt. Only real answers count. Common ones score low; obscure ones score high.";
   $("ans").value="";$("ans").disabled=true;$("go").disabled=true;$("go").textContent="Climb";
@@ -331,12 +334,25 @@ function lev(a,b,max){if(Math.abs(a.length-b.length)>max)return max+1;let p=Arra
 const INDEX={};
 for(const cat of BANK){const seen=new Set(),rows=[];for(const e of window.RAREAIR[cat]){const al=e.split("|").map(norm);if(al.some(x=>seen.has(x)))continue;al.forEach(x=>seen.add(x));rows.push({name:e.split("|")[0],al})}
   const n=rows.length;rows.forEach((r,k)=>r.score=Math.max(1,Math.round(1+99*Math.pow(k/(n-1),1.4))));INDEX[cat]=rows}
+const PMAP={},PROMPTS=[];
+const first=n=>norm(n).replace(/[^a-z]/g,"")[0]||"";
+for(const cat of BANK){
+  PMAP[cat]={cat,letter:null,rows:INDEX[cat]};PROMPTS.push(cat);
+  const by={};for(const r of INDEX[cat]){const L=first(r.name);if(L)(by[L]=by[L]||[]).push(r)}
+  for(const [L,list] of Object.entries(by)){
+    if(list.length<6)continue;
+    const n=list.length,rows=list.map((r,k)=>({...r,score:Math.max(1,Math.round(1+99*Math.pow(k/(n-1),1.4)))}));
+    const label=`${cat} starting with ${L.toUpperCase()}`;
+    PMAP[label]={cat,letter:L,rows};PROMPTS.push(label);
+  }
+}
 const NOTES=[[90,["Basically nobody says that.","Oxygen-mask territory.","You might be the only one."]],[60,["Deep cut. Respect.","Most climbers never get here.","Rare air indeed."]],[30,["Off the beaten trail.","Solid. Not the obvious pick.","Above the crowd."]],[10,["Plenty of company on this ledge.","A popular route.","Safe, but crowded."]],[0,["Everyone said that.","The first thing on everyone's mind.","Crowded base camp."]]];
-async function judge(cat,ans){
-  const q=norm(ans),rows=INDEX[cat]||[];
+async function judge(label,ans){
+  const P=PMAP[label]||{cat:label,letter:null,rows:INDEX[label]||[]},q=norm(ans),rows=INDEX[P.cat]||[];
   let hit=rows.find(r=>r.al.includes(q))||rows.find(r=>r.al.some(x=>x.replace(/ /g,"")===q.replace(/ /g,"")||(q.endsWith("s")&&x===q.slice(0,-1))));
   if(!hit&&q.length>=5){const tol=q.length>=9?2:1;let best=null,bd=9;for(const r of rows)for(const x of r.al){const d=lev(q,x,tol);if(d<=tol&&d<bd){bd=d;best=r}}hit=best}
   if(!hit) return {valid:false,canonical:ans,score:0,note:"Not on our list. If it's real, it's too rare even for us."};
+  if(P.letter){const h2=P.rows.find(r=>r.name===hit.name);if(!h2)return {valid:false,canonical:ans,score:0,msg:`“${hit.name.replace(/\b\w/g,c=>c.toUpperCase())}” doesn't start with ${P.letter.toUpperCase()}. Try another, the clock's still running.`};hit=h2}
   const pool=NOTES.find(x=>hit.score>=x[0])[1];
   return {valid:true,canonical:hit.name.replace(/\b\w/g,c=>c.toUpperCase()),score:hit.score,note:pool[Math.floor(Math.random()*pool.length)]};
 }
@@ -346,14 +362,14 @@ $("f").addEventListener("submit",e=>{
   if($("go").textContent==="Next"){next();return}
   const ans=$("ans").value.trim();if(!ans||!timer)return;
   judge(qs[i],ans).then(r=>{
-    if(!r.valid){reject(ans);return}
+    if(!r.valid){reject(ans,r.msg);return}
     stopClock();answer(ans);
   });
 });
-function reject(ans){
+function reject(ans,msg){
   const box=$("ans");
   box.classList.remove("shake");void box.offsetWidth;box.classList.add("shake");
-  $("hint").textContent=`“${ans}” isn't on the list. Try another — the clock's still running.`;
+  $("hint").textContent=msg||`“${ans}” isn't on the list. Try another, the clock's still running.`;
   $("hint").classList.add("err");
   box.select();
 }
