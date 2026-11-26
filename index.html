@@ -113,7 +113,7 @@ input.shake{animation:shake .35s ease;border-color:var(--red2)}
       <defs>
         <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--rock2)"/><stop offset="1" stop-color="var(--rock)"/></linearGradient>
       </defs>
-      <circle cx="130" cy="80" r="34" fill="var(--snow)" opacity=".7"/>
+      <circle cx="250" cy="70" r="30" fill="var(--snow)" opacity=".7"/>
       <path d="M0 380 L120 250 L190 300 L300 190 L360 240 L420 200 L520 290 L640 210 L800 320 L800 380Z" fill="var(--rock2)" opacity=".45"/>
       <path d="M40 380 L400 40 L760 380Z" fill="url(#g1)"/>
       <path d="M400 40 L760 380 L560 380 Z" fill="#000" opacity=".16"/>
@@ -177,10 +177,26 @@ const PEAK=8849,ROUNDS=7;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let climb=1,qs=[],i=0,res=[];
-try{climb=+(localStorage.getItem("rareair.climb")||1)}catch(e){}
+try{climb=+(localStorage.getItem("rareair.climb")||0)+1;localStorage.setItem("rareair.climb",climb)}catch(e){}
 
-function rng(seed){return()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296}}
-function pick(n){const r=rng(n*7919),a=BANK.slice();for(let k=a.length-1;k>0;k--){const j=Math.floor(r()*(k+1));[a[k],a[j]]=[a[j],a[k]]}return a.slice(0,ROUNDS)}
+// Shuffle-bag: no prompt repeats until every prompt has been played.
+const shuffle=a=>{for(let k=a.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[a[k],a[j]]=[a[j],a[k]]}return a};
+let memBag=null;
+function loadBag(){try{const b=JSON.parse(localStorage.getItem("rareair.bag")||"null");if(Array.isArray(b))return b.filter(x=>BANK.includes(x))}catch(e){}return memBag}
+function saveBag(b){memBag=b;try{localStorage.setItem("rareair.bag",JSON.stringify(b))}catch(e){}}
+function pick(){
+  let bag=loadBag()||[];
+  const out=[];
+  while(out.length<ROUNDS){
+    if(!bag.length) bag=shuffle(BANK.filter(x=>!out.includes(x)&&!lastSet.includes(x)));
+    if(!bag.length) bag=shuffle(BANK.filter(x=>!out.includes(x)));
+    out.push(bag.pop());
+  }
+  saveBag(bag);lastSet=out;
+  try{localStorage.setItem("rareair.last",JSON.stringify(out))}catch(e){}
+  return out;
+}
+let lastSet=[];try{lastSet=JSON.parse(localStorage.getItem("rareair.last")||"[]")}catch(e){}
 
 // mountain geometry: base (40..760, y380) to peak (400,40)
 const yFor=m=>380-28-(m/PEAK)*(380-28-46);
@@ -271,7 +287,7 @@ function celebrate(score,mv){
 }
 
 function start(){
-  qs=pick(climb);i=0;res=[];stopClock();shownM=0;
+  qs=pick();i=0;res=[];stopClock();shownM=0;
   $("done").hidden=true;$("play").hidden=false;
   moveClimber();show();
 }
