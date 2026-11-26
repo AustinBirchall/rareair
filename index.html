@@ -109,7 +109,7 @@ button:disabled{opacity:.55;cursor:wait}
     <h2 id="prompt"></h2>
     <p class="count" id="count"></p>
     <form id="f" autocomplete="off">
-      <div class="clock" id="clock" aria-live="polite"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" class="trk"/><circle cx="24" cy="24" r="20" class="arc" id="arc"/></svg><b id="secs">30</b></div>
+      <div class="clock" id="clock" aria-live="polite"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" class="trk"/><circle cx="24" cy="24" r="20" class="arc" id="arc"/></svg><b id="secs">25</b></div>
       <input id="ans" maxlength="60" placeholder="Your answer…" aria-label="Your answer">
       <button id="go" type="submit">Climb</button>
     </form>
@@ -178,7 +178,7 @@ function show(){
   $("dots").innerHTML=qs.map((_,k)=>`<i class="${k<i?"on":k===i?"cur":""}"></i>`).join("");
   $("rnd").textContent=`Climb #${climb} · round ${i+1} of ${ROUNDS}`;
   $("prompt").textContent="Name "+qs[i];
-  $("hint").textContent="30 seconds per prompt. Common answers score low; obscure but correct ones score high.";
+  $("hint").textContent="25 seconds per prompt. Common answers score low; obscure but correct ones score high.";
   $("ans").value="";$("ans").disabled=true;$("go").disabled=true;$("go").textContent="Climb";
   $("verdict").classList.remove("show");
   setClock(LIMIT);
@@ -189,7 +189,7 @@ function show(){
   };
   clearTimeout(pre);tick();
 }
-const LIMIT=30;let pre=0,timer=0,ends=0;
+const LIMIT=25;let pre=0,timer=0,ends=0;
 function setClock(s){
   $("secs").textContent=Math.ceil(s);
   $("arc").style.strokeDashoffset=125.7*(1-s/LIMIT);
